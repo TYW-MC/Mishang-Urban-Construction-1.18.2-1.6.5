@@ -5,7 +5,8 @@
   "name": "Mishang Urban Construction",
   "description": "The mod provides an amount of blocks and items that make a beautiful city, which includes roads, signs, lights, handrails, colored blocks and some useful tools. Thank you for using this mod. I'm looking forward to your suggestions.",
   "authors": [
-    "SolidBlock,TYWtudio(TYW)"
+    "SolidBlock",
+    "TYW"
   ],
   "contact": {
     "sources": "https://github.com/SolidBlock-cn/mishanguc",
