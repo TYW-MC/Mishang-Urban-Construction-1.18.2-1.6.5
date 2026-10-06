@@ -61,7 +61,7 @@ public interface RoadWithJointLine extends Road {
 
   @Override
   default BlockState withPlacementState(BlockState state, ItemPlacementContext ctx) {
-    final Direction rotation = ctx.getPlayerLookDirection();
+    final Direction rotation = ctx.getPlayerFacing();
     return Road.super
         .withPlacementState(state, ctx)
         .with(

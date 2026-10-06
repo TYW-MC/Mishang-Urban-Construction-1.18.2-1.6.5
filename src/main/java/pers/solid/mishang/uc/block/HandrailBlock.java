@@ -72,7 +72,7 @@ public abstract class HandrailBlock extends HorizontalFacingBlock implements Wat
     final BlockState stateToReplace = world.getBlockState(blockPos);
     final Direction facingToReplace = stateToReplace.getBlock() instanceof HandrailBlock ? stateToReplace.get(FACING) : null;
     if (state == null) return null;
-    final Direction playerFacing = ctx.getPlayerLookDirection();
+    final Direction playerFacing = ctx.getPlayerFacing();
     final Vec3d hitPos = ctx.getHitPos();
     final Direction.Axis axis = playerFacing.getAxis();
     assert axis != Direction.Axis.Y;
@@ -174,7 +174,7 @@ public abstract class HandrailBlock extends HorizontalFacingBlock implements Wat
       }
     }
     final Direction facing = state.get(FACING);
-    final Direction playerFacing = context.getPlayerLookDirection();
+    final Direction playerFacing = context.getPlayerFacing();
     final Vec3d hitPos = context.getHitPos();
     final Direction.Axis axis = playerFacing.getAxis();
     assert axis != Direction.Axis.Y;
