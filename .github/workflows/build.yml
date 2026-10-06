@@ -41,7 +41,8 @@ jobs:
             -Ploom_fabric_repository=https://maven.fabricmc.net
 
       - name: Build
-        run: ./gradlew build --stacktrace \
+        run: |
+          ./gradlew build --stacktrace \
             -Ploom_version_manifests=https://piston-meta.mojang.com/mc/game/version_manifest_v2.json \
             -Ploom_fabric_repository=https://maven.fabricmc.net
 
