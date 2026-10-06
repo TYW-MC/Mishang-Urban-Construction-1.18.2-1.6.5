@@ -1,0 +1,28 @@
+package pers.solid.mishang.uc.mixin;
+
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import net.minecraft.util.registry.RegistryEntry;
+import net.minecraft.world.PortalForcer;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import pers.solid.mishang.uc.Mishanguc;
+
+@Mixin(PortalForcer.class)
+public abstract class PortalForcerMixin {
+  /**
+   * 让下界传送门在生成时也接受 {@code mishanguc:nether_portal} 这个自定义兴趣点。
+   * <p>
+   * 兼容性说明：在 Sinytra Connector 等“Forge 上加载 Fabric 模组”的环境中，
+   * 目标方法运行时的参数类型会被重映射（例如 {@code Holder}），而本 mixin 的处理器
+   * 若书写具体类型（{@code RegistryEntry<PointOfInterestType>}）会触发 Mixin 的
+   * 参数签名校验失败，进而导致整个游戏崩溃。
+   * <p>
+   * 因此这里把参数声明为 {@code RegistryEntry<?>}——只依赖 {@code matchesId} 这个
+   * 与泛型无关的接口方法，避免在描述符中出现具体类型名。
+   * 同时设置 {@code require = 0}，使注入失败时静默跳过而不影响其他功能。
+   */
+  @ModifyReturnValue(method = "method_22389", at = @At("RETURN"), require = 0)
+  private static boolean acceptColoredPortal(boolean original, RegistryEntry<?> holder) {
+    return original || holder.matchesId(Mishanguc.id("nether_portal"));
+  }
+}

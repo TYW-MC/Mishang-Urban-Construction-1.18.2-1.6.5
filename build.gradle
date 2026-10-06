@@ -1,0 +1,129 @@
+plugins {
+    id 'fabric-loom' version '0.12.56'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = project.archives_base_name
+}
+version = project.mod_version + '+mc' + project.minecraft_version
+group = project.maven_group
+
+repositories {
+    // Add repositories to retrieve artifacts from in here.
+    // You should only use this when depending on other mods because
+    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
+    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
+    // for more information about repositories.
+
+    // Mods on Modrinth
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
+    }
+    // Mod Menu 模组
+    maven { url 'https://maven.terraformersmc.com/releases/' }
+    maven { url 'https://jitpack.io' }
+    // MixinExtras
+    maven {
+        name = 'Llamalad7'
+        url = 'https://maven.llamalad7.dev/'
+    }
+}
+
+
+dependencies {
+    // To change the versions see the gradle.properties file
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+
+    // Fabric API. This is technically optional, but you probably want it anyway.
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+    // MixinExtras：提供 @ModifyReturnValue / @Local / @Share 等增强注解
+    include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${project.mixinextras_version}")))
+}
+
+processResources {
+    inputs.property "version", project.mod_version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.mod_version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // Minecraft 1.18 upwards uses Java 17.
+    it.options.release = 17
+    // Show all compiler errors instead of stopping at the default 100.
+    it.options.compilerArgs += ['-Xmaxerrs', '2000']
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+
+    withSourcesJar()
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+// configure the maven publication
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+
+    repositories {
+    }
+}
+
+loom {
+    // 开发环境运行 mixin 时，需要显式指向 refmap，否则会报 "No refMap loaded"。
+    mixin {
+        defaultRefmapName = "mishanguc-refmap.json"
+    }
+
+    runs {
+        client {
+            programArg "-username=Solid"
+            // 开发环境需要开启 refmap 重映射，否则 mixin 报 "No refMap loaded"。
+            vmArg "-Dmixin.env.remapRefMap=true"
+            vmArg "-Dmixin.env.refMapRemappingFile=${projectDir}/build/tmp/compileClientJava/refmap.json"
+        }
+        // 1.18.2 的 Fabric Loom 需要显式声明 datagen 运行配置，才会生成 runDatagen 任务。
+        datagen {
+            inherit client
+            name "Data Generation"
+            vmArg "-Dfabric-api.datagen"
+            vmArg "-Dfabric-api.datagen.output-dir=${file("src/main/generated")}"
+            vmArg "-Dfabric-api.datagen.modid=mishanguc"
+            vmArg "-Dmixin.env.remapRefMap=true"
+            vmArg "-Dmixin.env.refMapRemappingFile=${projectDir}/build/tmp/compileClientJava/refmap.json"
+            runDir "build/datagen"
+        }
+    }
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDirs += ["src/main/generated"]
+        }
+    }
+}

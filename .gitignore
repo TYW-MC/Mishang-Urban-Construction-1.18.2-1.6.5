@@ -1,0 +1,49 @@
+# gradle
+
+.gradle/
+build/
+out/
+classes/
+
+# eclipse
+
+*.launch
+
+# idea
+
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# vscode
+
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# macos
+
+*.DS_Store
+
+# fabric
+
+run/
+/icon.xcf
+/icon-large.png
+/icon-wide.png
+
+docs/
+
+/token.txt
+/apiKey.txt
+# workbuddy
+.workbuddy/
+
+# datagen 产物（CI 会自动运行 runDatagen 重新生成）
+src/main/generated/
+
+# 备份 jar
+*.bak_*

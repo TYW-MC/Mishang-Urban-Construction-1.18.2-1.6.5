@@ -1,0 +1,97 @@
+package pers.solid.mishang.uc.item;
+
+import net.fabricmc.api.Environment;
+import pers.solid.mishang.uc.mixin.ItemUsageContextAccessor;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.item.ItemUsageContext;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.ItemPlacementContext;
+import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.text.Text;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
+import pers.solid.mishang.uc.MishangUtils;
+import pers.solid.mishang.uc.block.ColoredBlock;
+import pers.solid.mishang.uc.block.ColoredGlassHandrailBlock;
+import pers.solid.mishang.uc.blockentity.ColoredBlockEntity;
+import pers.solid.mishang.uc.util.TextBridge;
+
+/**
+ * <p>类似于 {@link BlockItem}，但是名称会调用 {@link Block#getName()}。</p>
+ * <p>必须注意：由于 {@link Block#getName()} 仅限客户端，因此本类的方块必须确保覆盖该方法时，没有注解为 {@code @}{@link Environment}{@code (EnvType.CLIENT)}！！</p>
+ */
+public class NamedBlockItem extends BlockItem {
+
+  public NamedBlockItem(Block block, Settings settings) {
+    super(block, settings);
+  }
+
+  @Override
+  public Text getName() {
+    return getBlock().getName();
+  }
+
+  @Override
+  public Text getName(ItemStack stack) {
+    final Block block = getBlock();
+    if (getBlock() instanceof ColoredBlock) {
+      final NbtCompound nbt = stack.getSubNbt("BlockEntityTag");
+      if (nbt != null && nbt.contains("color", NbtElement.NUMBER_TYPE)) {
+        final int color = nbt.getInt("color");
+        return TextBridge.translatable("block.mishanguc.colored_block.color", block.getName(), MishangUtils.describeColor(color));
+      } else if (getBlock() instanceof ColoredGlassHandrailBlock) {
+        return TextBridge.translatable("block.mishanguc.colored_block.auto_color_decoration", block.getName());
+      } else {
+        return TextBridge.translatable("block.mishanguc.colored_block.auto_color", block.getName());
+      }
+    }
+    return block.getName();
+  }
+
+  public static int getDependentColor(ItemPlacementContext context) {
+    final World world = context.getWorld();
+    final int dependentColor;
+    final BlockPos dependingPos = ((ItemUsageContextAccessor) context).invokeGetHitResult().getBlockPos();
+    if (world.getBlockEntity(dependingPos) instanceof ColoredBlockEntity dependingColoredBlockEntity) {
+      dependentColor = dependingColoredBlockEntity.getColor();
+    } else {
+      dependentColor = world.getBlockState(dependingPos).getMapColor(world, dependingPos).color;
+    }
+    return dependentColor;
+  }
+
+  @Override
+  protected boolean place(ItemPlacementContext context, BlockState state) {
+    final ItemStack stack = context.getStack();
+    if (getBlock() instanceof ColoredBlock) {
+      final Integer color;
+      final NbtCompound nbt = stack.getSubNbt("BlockEntityTag");
+      if (nbt != null && nbt.contains("color", NbtElement.NUMBER_TYPE)) {
+        color = nbt.getInt("color");
+      } else {
+        color = null;
+      }
+      final World world = context.getWorld();
+      int dependentColor = -1;
+      if (color == null) {
+        dependentColor = getDependentColor(context);
+      }
+      final boolean place = super.place(context, state);
+      final BlockEntity placedEntity = world.getBlockEntity(context.getBlockPos());
+      if (placedEntity instanceof final ColoredBlockEntity placedColoredBlockEntity) {
+        if (color == null) {
+          placedColoredBlockEntity.setColor(dependentColor);
+        } else {
+          placedColoredBlockEntity.setColor(color);
+        }
+      }
+      return place;
+    } else {
+      return super.place(context, state);
+    }
+  }
+}
