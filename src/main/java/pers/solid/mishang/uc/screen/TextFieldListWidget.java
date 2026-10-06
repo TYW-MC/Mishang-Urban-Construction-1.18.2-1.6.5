@@ -88,6 +88,24 @@ public class TextFieldListWidget extends AlwaysSelectedEntryListWidget<TextField
   }
 
   /**
+   * 1.18.2 中 {@link EntryListWidget#mouseClicked} 只会调用 {@link #setFocused(Element)}，不会调用
+   * {@link #setSelected(Entry)}（1.20.1 的 {@link Element} 有 {@code setFocused(boolean)} 会向下传播，
+   * 1.18.2 完全移除了这套机制）。因此这里补上选中状态的同步，否则会出现以下问题：
+   * <ul>
+   *   <li>点击某一行后，文字输入进入被点击的行，但属性面板（大小、颜色等）仍作用于之前选中的行；</li>
+   *   <li>旧行的文本框焦点没有被清除，导致多行同时显示白色高亮；</li>
+   *   <li>重新打开界面时没有选中任何行，属性按钮全部失效，只有文字能改。</li>
+   * </ul>
+   */
+  @Override
+  public void setFocused(@Nullable Element focused) {
+    super.setFocused(focused);
+    if (focused instanceof Entry entry) {
+      setSelected(entry, Screen.hasControlDown(), Screen.hasShiftDown());
+    }
+  }
+
+  /**
    * 设置当前 TextFieldListScreen 的已选中的文本框。
    *
    * @param entry 需要选中的 {@link Entry}。
@@ -626,6 +644,11 @@ public class TextFieldListWidget extends AlwaysSelectedEntryListWidget<TextField
         selectedEntries.add(this);
       } else {
         selectedEntries.remove(this);
+        // 取消选中时，如果控件内部的 focused 仍指向此行（例如该行已被移除），一并清除，
+        // 否则键盘事件会继续被转发到一个已经不在列表中的文本框。
+        if (TextFieldListWidget.this.getFocused() == this) {
+          ((ContainerWidgetAccessor) TextFieldListWidget.this).setFocusedRaw(null);
+        }
       }
       // 1.18.2 中 ClickableWidget.setFocused 是 protected，因此使用公开的 setTextFieldFocused。
       textFieldWidget.setTextFieldFocused(selected);

@@ -35,6 +35,7 @@ import org.lwjgl.glfw.GLFW;
 import pers.solid.mishang.uc.MishangUtils;
 import pers.solid.mishang.uc.Mishanguc;
 import pers.solid.mishang.uc.blockentity.BlockEntityWithText;
+import pers.solid.mishang.uc.mixin.ClickableWidgetInvoker;
 import pers.solid.mishang.uc.text.OutlineColorType;
 import pers.solid.mishang.uc.text.TextContext;
 import pers.solid.mishang.uc.util.HorizontalAlign;
@@ -140,10 +141,12 @@ public abstract class AbstractSignBlockEditScreen<T extends BlockEntityWithText>
 
     final List<TextFieldListWidget.Entry> selectedCopy = Lists.reverse(textFieldListWidget.children()).stream().filter(textFieldListWidget.selectedEntries::contains).toList();
     final TextFieldListWidget.Entry previouslySelected = textFieldListWidget.getSelectedOrNull();
-    for (TextFieldListWidget.Entry selectedEntry : textFieldListWidget.selectedEntries) {
-      // 1.18.2: ClickableWidget.setFocused 为 protected，此处仅清除选中标记。
-      textFieldListWidget.setFocused(null);
+    // 1.18.2 中取消选中通过 Entry#setSelected(boolean) 完成（同时会清除文本框焦点），
+    // 由于该操作会修改 selectedEntries，故先复制一份再遍历。
+    for (TextFieldListWidget.Entry selectedEntry : List.copyOf(textFieldListWidget.selectedEntries)) {
+      selectedEntry.setSelected(false);
     }
+    textFieldListWidget.setFocused(null);
     textFieldListWidget.selectedEntries.clear();
 
     for (TextFieldListWidget.Entry entry : selectedCopy) {
@@ -853,7 +856,10 @@ public abstract class AbstractSignBlockEditScreen<T extends BlockEntityWithText>
       for (ButtonWidget button : textHolder.buttons) {
         button.visible = visible;
         // 在 1.21.3 以下版本，选中一个按钮并应用预设后，按钮会持续保持聚集，即使其不显示。
-        // 1.18.2 中 ClickableWidget.setFocused 是 protected，无法在这里调用，故省略。
+        // 1.18.2 中 ClickableWidget.setFocused 是 protected，通过 Invoker 调用。
+        if (!visible) {
+          ((ClickableWidgetInvoker) button).invokeSetFocused(false);
+        }
       }
     }
   }
