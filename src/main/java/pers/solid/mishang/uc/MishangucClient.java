@@ -5,6 +5,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.BlockEntityRendererRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.ColorProviderRegistry;
@@ -59,6 +60,9 @@ public class MishangucClient implements ClientModInitializer {
    * @see MishangucRules#CARRYING_TOOL_ACCESS
    */
   public static final AtomicReference<MishangucRules.ToolAccess> CLIENT_CARRYING_TOOL_ACCESS = new AtomicReference<>(MishangucRules.ToolAccess.ALL);
+
+  /** @see #scheduleForgeRenderLayers(java.util.List, java.util.List) */
+  private static boolean forgeRenderLayersApplied = false;
 
   @Override
   public void onInitializeClient() {
@@ -212,9 +216,36 @@ public class MishangucClient implements ClientModInitializer {
         cutoutList.add(roadBlock.getRoadSlab());
       }
     });
-    registerForgeRenderLayers(cutoutList, translucentList);
+    scheduleForgeRenderLayers(cutoutList, translucentList);
     MishangucBlocks.translucentBlocks = null;
     MishangucBlocks.cutoutBlocks = null;
+  }
+
+  /**
+   * <p>把 Forge 侧的渲染层补注册推迟到客户端的第一个 tick。
+   *
+   * <p>Sinytra Connector 下 Fabric 的客户端入口点由 {@code Main#main} 直接调用，此时
+   * {@code MinecraftClient} 还没有被构造出来。而 Embeddium / Rubidium 混入了 Forge 的
+   * {@code ItemBlockRenderTypes.setRenderLayer}，其回调里会执行
+   * {@code Minecraft.getInstance().execute(...)} —— 实例为 null 时直接抛
+   * {@link NullPointerException}。由于
+   * {@link #registerForgeRenderLayers(Iterable, Iterable)} 还会顺带触发
+   * {@code ItemBlockRenderTypes} 的类初始化，这个 NPE 会以
+   * {@code ExceptionInInitializerError} 的形式让整个类初始化失败，客户端在启动阶段
+   * 就崩溃（日志表现为 Connector 报 {@code Could not execute entrypoint stage
+   * 'client' ... provided by 'mishanguc'}）。
+   *
+   * <p>第一个 tick 时客户端对象已经存在，又远早于任何区块渲染，因此既保住了对
+   * Embeddium 一类优化模组的适配，也不会再踩到这个雷。
+   */
+  private static void scheduleForgeRenderLayers(List<Block> cutoutBlocks, List<Block> translucentBlocks) {
+    ClientTickEvents.END_CLIENT_TICK.register(client -> {
+      if (forgeRenderLayersApplied) {
+        return;
+      }
+      forgeRenderLayersApplied = true;
+      registerForgeRenderLayers(cutoutBlocks, translucentBlocks);
+    });
   }
 
   /**
@@ -232,6 +263,12 @@ public class MishangucClient implements ClientModInitializer {
    * 环境没有 {@code net.minecraft.client.renderer.ItemBlockRenderTypes} 类，
    * 直接跳过。渲染层实例本身（{@link RenderLayer#getCutout()} 等）由 Connector
    * 重映射到 Forge 运行时的同一单例，可直接复用。
+   *
+   * <p><b>调用时机：</b>必须等到 MinecraftClient 实例存在之后才能调用，否则
+   * Embeddium 一类模组对 {@code setRenderLayer} 的挂钩会因
+   * {@code Minecraft.getInstance()} 为 null 而让 {@code ItemBlockRenderTypes}
+   * 类初始化失败、客户端直接崩溃。因此本方法只应通过
+   * {@link #scheduleForgeRenderLayers(List, List)} 间接调用。
    */
   @SuppressWarnings("unchecked")
   private static void registerForgeRenderLayers(Iterable<Block> cutoutBlocks, Iterable<Block> translucentBlocks) {
