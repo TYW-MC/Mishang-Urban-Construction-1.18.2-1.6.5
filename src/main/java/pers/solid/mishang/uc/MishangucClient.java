@@ -43,6 +43,10 @@ import pers.solid.mishang.uc.screen.StandingSignBlockEditScreen;
 import pers.solid.mishang.uc.screen.WallSignBlockEditScreen;
 
 import java.awt.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Environment(EnvType.CLIENT)
@@ -194,14 +198,91 @@ public class MishangucClient implements ClientModInitializer {
 
   private static void registerBlockLayers() {
     // 设置相应的 BlockLayer
-    Validate.notEmpty(MishangucBlocks.translucentBlocks).forEach(block -> BlockRenderLayerMap.INSTANCE.putBlock(block, RenderLayer.getTranslucent()));
+    final List<Block> translucentList = new java.util.ArrayList<>();
+    final List<Block> cutoutList = new java.util.ArrayList<>();
+    Validate.notEmpty(MishangucBlocks.translucentBlocks).forEach(block -> {
+      BlockRenderLayerMap.INSTANCE.putBlock(block, RenderLayer.getTranslucent());
+      translucentList.add(block);
+    });
     Validate.notEmpty(MishangucBlocks.cutoutBlocks).forEach(block -> {
       BlockRenderLayerMap.INSTANCE.putBlock(block, RenderLayer.getCutout());
+      cutoutList.add(block);
       if (block instanceof AbstractRoadBlock roadBlock && roadBlock.getRoadSlab() != null) {
         BlockRenderLayerMap.INSTANCE.putBlock(roadBlock.getRoadSlab(), RenderLayer.getCutout());
+        cutoutList.add(roadBlock.getRoadSlab());
       }
     });
+    registerForgeRenderLayers(cutoutList, translucentList);
     MishangucBlocks.translucentBlocks = null;
     MishangucBlocks.cutoutBlocks = null;
+  }
+
+  /**
+   * <p>Forge（含 Sinytra Connector）环境兼容。Forge 同时存在两套方块渲染层映射：
+   * 原版的 {@code TYPE_BY_BLOCK}（{@code f_109275_}，区块渲染
+   * {@code getChunkRenderType} 路径），以及 Forge 自己的 {@code blockRenderChecks}
+   * 谓词映射（{@code canRenderInLayer} / {@code getRenderType(state, cull)} 路径）。
+   * Fabric API 的 {@code BlockRenderLayerMap} 经 Connector 桥接时只写入前者，
+   * 而部分优化模组（如 Embeddium/Rubidium）查询的是谓词映射，于是本模组带透明
+   * 贴图的方块（道路标线、地面标识、告示牌等）被按 solid 层渲染，透明像素
+   * （RGB 为黑或白）被直接画出来，外观呈现为黑色或白色色块。
+   *
+   * <p>这里在检测到 Forge 运行环境时，通过反射调用 {@code setRenderLayer} 写入
+   * 谓词映射，并直接写入原版 {@code TYPE_BY_BLOCK}，两套映射双保险。纯 Fabric
+   * 环境没有 {@code net.minecraft.client.renderer.ItemBlockRenderTypes} 类，
+   * 直接跳过。渲染层实例本身（{@link RenderLayer#getCutout()} 等）由 Connector
+   * 重映射到 Forge 运行时的同一单例，可直接复用。
+   */
+  @SuppressWarnings("unchecked")
+  private static void registerForgeRenderLayers(Iterable<Block> cutoutBlocks, Iterable<Block> translucentBlocks) {
+    final Class<?> clazz;
+    try {
+      clazz = Class.forName("net.minecraft.client.renderer.ItemBlockRenderTypes");
+    } catch (ClassNotFoundException e) {
+      // 纯 Fabric 环境，无需 Forge 兼容。
+      return;
+    }
+    try {
+      // 1) Forge 的谓词映射：优化模组（Embeddium 等）经 canRenderInLayer 查询的路径。
+      final Method setRenderLayer = clazz.getMethod("setRenderLayer", Block.class, RenderLayer.class);
+      for (final Block block : cutoutBlocks) {
+        setRenderLayer.invoke(null, block, RenderLayer.getCutout());
+      }
+      for (final Block block : translucentBlocks) {
+        setRenderLayer.invoke(null, block, RenderLayer.getTranslucent());
+      }
+      // 2) 原版的 TYPE_BY_BLOCK 映射：区块渲染路径，字段在 1.18.2 Forge 中为 f_109275_。
+      Field typeByBlock = null;
+      for (final String fieldName : new String[] {"TYPE_BY_BLOCK", "f_109275_"}) {
+        try {
+          typeByBlock = clazz.getDeclaredField(fieldName);
+          break;
+        } catch (NoSuchFieldException ignored) {
+        }
+      }
+      if (typeByBlock != null) {
+        typeByBlock.setAccessible(true);
+        final Map<Block, RenderLayer> map = (Map<Block, RenderLayer>) typeByBlock.get(null);
+        for (final Block block : cutoutBlocks) {
+          map.put(block, RenderLayer.getCutout());
+        }
+        for (final Block block : translucentBlocks) {
+          map.put(block, RenderLayer.getTranslucent());
+        }
+      }
+      Mishanguc.MISHANG_LOGGER.info(
+          "Applied Forge render-layer compatibility (Embeddium etc.): {} cutout blocks, {} translucent blocks.",
+          cutoutListSize(cutoutBlocks), cutoutListSize(translucentBlocks));
+    } catch (final ReflectiveOperationException | RuntimeException e) {
+      Mishanguc.MISHANG_LOGGER.error("Failed to apply Forge render-layer compatibility.", e);
+    }
+  }
+
+  private static int cutoutListSize(Iterable<Block> blocks) {
+    int size = 0;
+    for (final Block ignored : blocks) {
+      size++;
+    }
+    return size;
   }
 }
